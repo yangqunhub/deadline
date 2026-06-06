@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>📅 Deadline · 任务清单</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* 兜底字体 + 极简自定义 */
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+    .toast-container {
+      position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+      z-index: 9999; display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+    }
+    .toast {
+      padding: 10px 16px; border-radius: 8px; color: white; font-size: 14px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15); pointer-events: auto;
+      animation: slideIn 0.2s ease;
+    }
+    .toast.success { background: #10b981; }
+    .toast.error   { background: #ef4444; }
+    .toast.info    { background: #3b82f6; }
+    @keyframes slideIn { from { transform: translateY(-10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .loading-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9998;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+      color: white; font-size: 14px;
+    }
+    .spinner {
+      width: 32px; height: 32px; border: 3px solid rgba(255,255,255,0.3);
+      border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* 完成庆祝动画 - confetti */
+    .celebrate-overlay {
+      position: fixed; inset: 0; pointer-events: none; z-index: 9997; overflow: hidden;
+    }
+    .confetti {
+      position: absolute; top: -20px; font-size: 24px;
+      animation: confettiFall linear forwards;
+    }
+    @keyframes confettiFall {
+      0%   { transform: translateY(0) rotate(0deg); opacity: 1; }
+      80%  { opacity: 1; }
+      100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+    }
+    .celebrate-burst {
+      position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 96px; z-index: 9997; pointer-events: none;
+      animation: burst 1.2s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    }
+    @keyframes burst {
+      0%   { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+      30%  { transform: translate(-50%, -50%) scale(1.3); opacity: 1; }
+      60%  { transform: translate(-50%, -50%) scale(0.9); opacity: 1; }
+      100% { transform: translate(-50%, -50%) scale(1) translateY(-40px); opacity: 0; }
+    }
+
+    /* 编辑弹窗 */
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9990;
+      display: flex; align-items: center; justify-content: center; padding: 16px;
+      animation: fadeIn 0.2s ease;
+    }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .modal-card {
+      background: white; border-radius: 16px; max-width: 600px; width: 100%;
+      max-height: 90vh; overflow-y: auto; padding: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+
+    details > summary { list-style: none; cursor: pointer; }
+    details > summary::-webkit-details-marker { display: none; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+  <!-- 顶部 -->
+  <header class="bg-white border-b border-gray-200 sticky top-0 z-10">
+    <div class="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
+      <h1 class="text-lg font-semibold text-gray-900">📅 Deadline</h1>
+      <button id="settings-btn" class="text-sm text-gray-600 hover:text-gray-900 px-3 py-1.5 rounded-lg hover:bg-gray-100">
+        ⚙️ 设置
+      </button>
+    </div>
+
+    <!-- Tab 切换 -->
+    <div class="max-w-3xl mx-auto px-4 flex gap-1 pb-2 text-sm flex-wrap items-center justify-between">
+      <div class="flex gap-1">
+        <button data-tab="pending" class="tab-btn px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 font-medium">📋 待办</button>
+        <button data-tab="done" class="tab-btn px-3 py-1.5 rounded-lg text-gray-600 hover:bg-gray-100">✅ 已完成</button>
+        <button data-tab="cancelled" class="tab-btn px-3 py-1.5 rounded-lg text-gray-600 hover:bg-gray-100">🚫 已取消</button>
+      </div>
+      <div class="flex gap-1">
+        <button data-view="list" class="view-btn px-2 py-1.5 rounded-lg bg-gray-100 text-gray-700 text-xs font-medium">📋 列表</button>
+        <button data-view="week" class="view-btn px-2 py-1.5 rounded-lg text-gray-500 hover:bg-gray-100 text-xs">📅 周历</button>
+        <button data-view="month" class="view-btn px-2 py-1.5 rounded-lg text-gray-500 hover:bg-gray-100 text-xs">🗓️ 月历</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-3xl mx-auto px-4 py-4 pb-24">
+
+    <!-- 搜索筛选区(列表视图才显示) -->
+    <div id="filter-bar" class="mb-3 flex gap-2">
+      <input id="search-input" type="text" placeholder="🔍 搜索任务名/描述..."
+        class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+      <select id="filter-type" class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <option value="">🏷️ 全部类型</option>
+        <option value="homework">📚 作业</option>
+        <option value="exam">📝 考试</option>
+        <option value="registration">🎟️ 报名</option>
+        <option value="assignment">📌 任务</option>
+        <option value="other">📦 其他</option>
+      </select>
+      <select id="filter-urgency" class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <option value="">🎯 全部重要度</option>
+        <option value="high">🔴 重要</option>
+        <option value="medium">🔵 普通</option>
+        <option value="low">⚪ 次要</option>
+      </select>
+    </div>
+
+    <!-- 提醒条 -->
+    <div class="mb-4 p-3 bg-amber-50 border-l-4 border-amber-400 rounded-r-lg text-sm text-amber-800 flex items-center gap-2">
+      <span class="text-lg">💡</span>
+      <span>每天打开看一眼，别让任务从指缝溜走</span>
+    </div>
+
+    <!-- 设置面板（默认隐藏） -->
+    <section id="settings-panel" class="hidden mb-6 bg-white rounded-xl border border-gray-200 p-4 space-y-3 shadow-sm">
+      <h2 class="text-base font-semibold text-gray-900">⚙️ API 设置</h2>
+      <p class="text-xs text-gray-500">
+        填入兼容 OpenAI 协议的 API（豆包/通义千问/DeepSeek/OpenAI/OpenRouter 等），key 仅存浏览器本地。
+      </p>
+
+      <div>
+        <label class="block text-xs text-gray-600 mb-1">🔗 Base URL</label>
+        <input id="cfg-baseurl" type="text" placeholder="https://ark.cn-beijing.volces.com/api/v3"
+          class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <p class="text-xs text-gray-400 mt-1">常用预设：
+          <a href="#" data-preset="doubao" class="text-blue-500 hover:underline">🤖 豆包</a> ·
+          <a href="#" data-preset="qwen" class="text-blue-500 hover:underline">🧠 通义千问</a> ·
+          <a href="#" data-preset="deepseek" class="text-blue-500 hover:underline">🌊 DeepSeek</a> ·
+          <a href="#" data-preset="openai" class="text-blue-500 hover:underline">✨ OpenAI</a> ·
+          <a href="#" data-preset="openrouter" class="text-blue-500 hover:underline">🌐 OpenRouter</a>
+        </p>
+      </div>
+
+      <div>
+        <label class="block text-xs text-gray-600 mb-1">🔑 API Key</label>
+        <input id="cfg-key" type="password" placeholder="sk-..."
+          class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+
+      <div>
+        <label class="block text-xs text-gray-600 mb-1">🧩 模型名</label>
+        <input id="cfg-model" type="text" placeholder="doubao-1-5-vision-pro-32k-250115"
+          class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+
+      <div class="flex gap-2 pt-2">
+        <button id="cfg-save" class="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700">
+          💾 保存
+        </button>
+        <button id="cfg-test" class="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-medium hover:bg-gray-200">
+          🧪 测试连接
+        </button>
+      </div>
+    </section>
+
+    <!-- 上传区 -->
+    <section class="mb-6 bg-white rounded-xl border border-gray-200 p-4 space-y-3 shadow-sm">
+      <h2 class="text-base font-semibold text-gray-900">📥 新建任务</h2>
+
+      <div class="flex gap-2 text-xs">
+        <button data-source="qq" class="source-chip flex-1 py-1.5 rounded-lg border border-gray-300 bg-blue-50 text-blue-700 font-medium">💬 QQ 群</button>
+        <button data-source="wechat" class="source-chip flex-1 py-1.5 rounded-lg border border-gray-300 text-gray-600">📱 微信</button>
+        <button data-source="pdf" class="source-chip flex-1 py-1.5 rounded-lg border border-gray-300 text-gray-600">📄 PDF/学习通</button>
+        <button data-source="text" class="source-chip flex-1 py-1.5 rounded-lg border border-gray-300 text-gray-600">📝 纯文本</button>
+        <button data-source="image" class="source-chip flex-1 py-1.5 rounded-lg border border-gray-300 text-gray-600">🖼️ 其他</button>
+      </div>
+
+      <!-- 图片/PDF 上传区 -->
+      <div id="upload-area" class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition">
+        <div class="text-4xl mb-1">📷</div>
+        <div class="text-sm text-gray-600">点击选择 / 拖入图片</div>
+        <div class="text-xs text-gray-400 mt-1">支持 JPG / PNG / WEBP · ≤ 5MB</div>
+        <input id="file-input" type="file" accept="image/*" class="hidden">
+      </div>
+
+      <div id="preview-container" class="hidden">
+        <img id="preview-image" class="max-h-40 mx-auto rounded-lg border border-gray-200 shadow-sm">
+        <button id="preview-clear" class="block mx-auto mt-2 text-xs text-red-500 hover:underline">🚮 移除</button>
+      </div>
+
+      <!-- 或文本输入 -->
+      <div>
+        <label class="block text-xs text-gray-600 mb-1">📝 或直接粘贴文本（可与图片叠加）</label>
+        <textarea id="text-input" rows="3" placeholder="例：6月10号前交高数作业 P78 习题3-5"
+          class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+      </div>
+
+      <button id="extract-btn" disabled
+        class="w-full bg-blue-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition">
+        🤖 提取任务
+      </button>
+    </section>
+
+    <!-- 确认面板（AI 提取后出现） -->
+    <section id="confirm-panel" class="hidden mb-6 space-y-3">
+      <div class="p-3 bg-blue-50 border-l-4 border-blue-400 rounded-r-lg text-sm text-blue-800 flex items-center gap-2">
+        <span class="text-lg">🤖</span>
+        <span>AI 提取了 <span id="confirm-count" class="font-bold">0</span> 个任务，请检查并编辑</span>
+      </div>
+      <div id="confirm-list" class="space-y-3"></div>
+      <div class="flex gap-2">
+        <button id="confirm-cancel" class="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-200">
+          ↩️ 取消
+        </button>
+        <button id="confirm-save" class="flex-[2] bg-blue-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700">
+          ✅ 全部入库
+        </button>
+      </div>
+    </section>
+
+    <!-- 任务列表 -->
+    <section id="task-section">
+      <div id="empty-state" class="hidden text-center py-16">
+        <div class="text-6xl mb-3">🎯</div>
+        <div class="text-gray-700 text-base font-medium">还没有任务</div>
+        <div class="text-gray-400 text-sm mt-2">上传截图或粘贴文本，让 AI 帮你提取 ✨</div>
+        <div class="text-gray-300 text-xs mt-1">第一张图开始，把 deadline 收进口袋</div>
+      </div>
+      <div id="task-list" class="space-y-3"></div>
+    </section>
+  </main>
+
+  <!-- 追问模态框(智能拆解用) -->
+  <div id="clarify-modal" class="hidden">
+    <div class="modal-backdrop" id="clarify-backdrop">
+      <div class="modal-card" onclick="event.stopPropagation()">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-base font-semibold text-gray-900">🤖 AI 想多问几句</h2>
+          <button id="clarify-close" class="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+        </div>
+        <p class="text-xs text-gray-500 mb-4">回答这几个问题，AI 才能拆得准 ↓</p>
+        <div id="clarify-questions" class="space-y-4"></div>
+        <div class="flex gap-2 mt-5">
+          <button id="clarify-skip" class="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-200">
+            ↩️ 跳过,直接拆
+          </button>
+          <button id="clarify-submit" class="flex-[2] bg-blue-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700">
+            🧠 生成拆解 →
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

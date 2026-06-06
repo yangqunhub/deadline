@@ -1656,10 +1656,10 @@
       } p-4 space-y-2`;
       card.innerHTML = `
         <div class="flex items-start justify-between gap-2">
-          <div class="font-medium text-gray-900 text-sm flex-1">
+          <div class="font-medium text-gray-900 text-sm flex-1 min-w-0 break-words">
             <span class="mr-1" title="重要度">${starsHtml(t.urgency)}</span>${escapeHtml(t.title)}
           </div>
-          <span class="text-xs px-2 py-0.5 rounded ${typeColor(t.type)}">${typeLabel(t.type)}</span>
+          <span class="text-xs px-2 py-0.5 rounded flex-shrink-0 ${typeColor(t.type)}">${typeLabel(t.type)}</span>
         </div>
         <div class="flex items-center gap-3 text-xs text-gray-500 flex-wrap">
           ${t._recurringDisplay ? `<span class="text-purple-600 font-medium">${t._recurringDisplay}</span>` : ''}
@@ -1730,12 +1730,12 @@
       <div class="flex items-center justify-between mb-3">
         <h3 class="text-sm font-semibold text-gray-700">📅 本周 (${formatDate(weekStart.toISOString())} ~ ${formatDate(new Date(weekEnd.getTime() - 86400000).toISOString())})</h3>
       </div>
-      <div class="grid grid-cols-7 gap-1">
+      <div class="grid grid-cols-7 gap-1 overflow-hidden">
         ${days.map((d, i) => {
           const dayTasks = tasksByDay[i];
           const today_ = isToday(d);
           return `
-            <div class="rounded-lg p-2 min-h-[100px] ${today_ ? 'bg-blue-50 border-2 border-blue-300' : 'bg-white border border-gray-200'}">
+            <div class="rounded-lg p-1 sm:p-2 min-h-[100px] min-w-0 overflow-hidden ${today_ ? 'bg-blue-50 border-2 border-blue-300' : 'bg-white border border-gray-200'}">
               <div class="text-xs text-gray-500 mb-1">${WEEKDAY_LABELS[i]}</div>
               <div class="text-lg font-semibold ${today_ ? 'text-blue-600' : 'text-gray-800'}">${d.getDate()}</div>
               <div class="mt-1 space-y-1">
@@ -1789,14 +1789,14 @@
       <div class="grid grid-cols-7 gap-1 text-center text-xs text-gray-500 mb-1">
         ${['日','一','二','三','四','五','六'].map(w => `<div>${w}</div>`).join('')}
       </div>
-      <div class="grid grid-cols-7 gap-1">
+      <div class="grid grid-cols-7 gap-1 overflow-hidden">
         ${cells.map(d => {
-          if (!d) return '<div class="min-h-[60px]"></div>';
+          if (!d) return '<div class="min-h-[60px] min-w-0"></div>';
           const key = toISODate(d);
           const dayTasks = tasksByDate[key] || [];
           const isToday = toISODate(d) === toISODate(today);
           return `
-            <div class="rounded p-1 min-h-[60px] ${isToday ? 'bg-blue-50 border border-blue-300' : 'bg-white border border-gray-200'}">
+            <div class="rounded p-1 min-h-[60px] min-w-0 overflow-hidden ${isToday ? 'bg-blue-50 border border-blue-300' : 'bg-white border border-gray-200'}">
               <div class="text-xs ${isToday ? 'text-blue-600 font-bold' : 'text-gray-700'}">${d.getDate()}</div>
               <div class="space-y-0.5 mt-0.5">
                 ${dayTasks.slice(0, 2).map(t => `

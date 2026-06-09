@@ -24,3 +24,10 @@ package-lock.json
 # ============ Python 临时 ============
 __pycache__/
 *.pyc
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example
